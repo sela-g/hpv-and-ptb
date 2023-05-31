@@ -129,19 +129,25 @@ vacc_mom <- vacc %>%
 # 5399 women
 
 # We no longer seem to have number of doses information
+# TODO: See if the above is still true
 #describeFactors(vacc_mom$HPV.Vaccination.Status)
 # Invalid "4 (0.1%)"     
 # NA      "5,030 (93.2%)"
 # Valid   "276 (5.1%)"   
 # Missing "89 (1.6%)" 
 
+# TODO: Fix 
 vacc_mom <- vacc_mom %>% 
   mutate(vaccine = case_when(
-    is.na(HPV.Vaccination.Status) | HPV.Vaccination.Status == "NA" | HPV.Vaccination.Status == "Invalid" ~ "No",
-    HPV.Vaccination.Status == "Valid" == "Yes"
+    is.na(Immunization.Date) | Immunization.Date == "NA" 
+    #| HPV.Vaccination.Status == "Invalid" 
+    ~ "No",
+    Immunization.Date != "NA"| is.na(Immunization.Date) ~ "Yes"
   ))
 
-vacc_mom$BCCDC_ID <- as.character(vacc_mom$BCCDC_ID)
+vacc$mother_study_id <- as.character(vacc$mother_study_id)
+
+# TODO: Fix
 del_imms$BCCDC_Imms_Study_ID <- as.character(del_imms$BCCDC_Imms_Study_ID)
 
 vacc_test <- left_join(del_imms, vacc_mom, by = c("BCCDC_Imms_Study_ID" = "BCCDC_ID"))
