@@ -1,13 +1,17 @@
 # title: "HPV and PTB"
-# author: "Arianne Albert, PhD edited for dataset (***DATE***) by Sela Grays"
-# date: "05/27/2020"
+# author: 
+  # "Arianne Albert, PhD 
+  # edited for dataset (recieved 8-MAY-2023) by Sela Grays"
+# input:
+  # CSV File: perinatal_panorama_joined_external 
 # output:
-  # html_document
+  # HTML File: html_document
 
-knitr::opts_chunk$set(echo = FALSE, include = FALSE)
+# knitr::opts_chunk$set(echo = FALSE, include = FALSE)
 # options(digits = 2)
 
-library(Gmisc)
+#library(Gmisc)
+library(tidyverse)
 library(broman)
 library(pander)
 library(knitr)
@@ -15,13 +19,21 @@ library(dplyr)
 library(MASS)
 library(effects)
 library(emmeans)
-# library(rcompanion)
+#library(rcompanion)
 library(DescTools)
 library(tidyr)
 library(sjPlot)
 library(here)
 library(readxl)
+library(ggplot2)
 library(ggpubr)
+library(openxlsx)
+library(corrplot)
+
+rm(list = ls())
+getwd()
+setwd("/Users/selagrays/dev/hpv-and-ptb")
+getwd()
 
 theme_set(theme_pubr)
 
@@ -60,56 +72,64 @@ cr2 <- function (formula, data, weights = NULL, na.action = na.omit)
   data.frame(risk = Y, x = X)
 }
 
-# ## vaccine data
-vacc <- read_excel(here("output_deid_final.xlsx"))
-head(vacc)
+
+### Import dataframe
+joined <- read_csv("perinatal_panorama_joined_external.csv") %>% as_tibble()
+
+### vaccine data
+vaccine_data <- c("mother_study_id","m_num_births", "Age at dose", "Client Health Region HSDA", "Client Health Region HA", "Postal Code", 
+                  "Immunization Date", "Product Trade Name", "Antigen", "joined_on")
+vacc <- joined %>% dplyr::select(vaccine_data)
+tail(vacc)
 
 ## are there multiple rows per mom (to account for multiples)
 any(duplicated(vacc$mother_study_id))
 # TRUE
 
-describeFactors(vacc$m_num_births)
+summary(as_factor(vacc$m_num_births))
+## TODO: Proportions of factors
 # 1 "5,786 (99.0%)"
 # 2 "56 (1.0%)" 
 
+## TODO: Twin counts
 # 28 sets of twins
 
-## also for multiple vaccine doses?
-any(duplicated(vacc$BCCDC_ID))
+## also for ?multiple vaccine doses?, might not be possible for current dataset
+## bany(duplicated(vacc$BCCDC_ID))
 # FALSE
 
 
 ## link to other data
 ## labour and delivery data
-del.dat <- read.csv(here("DeID R2018007_Multiple_Labours.csv"))
-head(del.dat)
+delivery_data <- c("mother_study_id","m_num_births", "m_labour_type",	'm_mode_del',	"m_mode_del2", 
+                   "labour_spont_flg", "labour_ind_flg", "labour_none_flg",	"labour_unknown_flg",
+                   "indication_for_induction", "labour_aug_flg", "csection_type",	"primary_ind_operative_delivery")
+deliv <- joined %>% dplyr::select(delivery_data)
+tail(deliv)
 
 ## mom data
-mom.dat <- read.csv(here("DeID R2018007_Mother.csv"))
-head(mom.dat)
+mom_data<- c("mother_study_id","m_num_births", "gravida",	"premature",	"pre_pregnancy_weight",	"m_bmi_no",	"r_substance_use",
+             "r_heroin", "r_cocaine",	"r_methadone",	"r_solvents",	"r_rx",	"r_marijuana",	"r_other_drug",
+             "r_unk_drug","r_alc_flg","smoker_type_cd",	
+             "cigs_per_day", "second_hand_smoke")
+mom <- joined %>% dplyr::select(mom_data)
+tail(mom)
 
 ## baby data
-baby.dat <- read.csv(here("DeID R2018007_Baby.csv"))
-head(baby.dat)
-# not sure there's much of use here. The GA is more accurate in the delivery data
+baby_data <- c("mother_study_id","m_num_births", "baby_study_id",	"b_screen_source","baby_sequence",	"multiple_birth_count",	"gest_age_by_exam",	
+               "gest_age_from_document",	"b_birth_type",	"lmpgaw",	"usgaw",	"final_ga",	"baby_delivered_year",	"baby_delivered_month")
+baby <- joined %>% dplyr::select(baby_data)
+tail(baby)
 
 
-del_imms <- read.csv(here("DeID Imms Records.csv")) # not sure that these match anymore
-
-
-
-
-```
-
-```{r figure out number of vaccine doses}
-# take the last row
+# take the last row: might be problematic because we have multiple doses for each and shouldn't collapse that
 vacc_mom <- vacc %>%
   group_by(mother_study_id) %>%
-  slice(n = 1)
+  slice(1)
 # 5399 women
 
 # We no longer seem to have number of doses information
-describeFactors(vacc_mom$HPV.Vaccination.Status)
+#describeFactors(vacc_mom$HPV.Vaccination.Status)
 # Invalid "4 (0.1%)"     
 # NA      "5,030 (93.2%)"
 # Valid   "276 (5.1%)"   
@@ -142,10 +162,6 @@ describeFactors(vacc_test_one$HPV.Dose.Number)
 
 describeFactors(del_imms$HPV.Dose.Number)
 
-```
-
-```{r merge delivery with vaccine}
-
 head(vacc2)
 head(del.dat) # del.dat does not have the linking id
 head(mom.dat) # this one links Imms study ID with Mother study ID
@@ -171,8 +187,6 @@ head(vacc.del)
 length(levels(factor(vacc.del$BCCDC_Imms_Study_ID)))
 # 5,072 women
 
-# remove anyone whose HPV dose is NA because we can't know their vaccination status?
-# AGAIN NO BECAUSE ITS JUST THAT WE DONT KNW THEIR STATUS AND WE SHOULD KEEP THE IN THE CONTROL/COMPARISON GROUP
 
 # vacc.del <- vacc.del[-which(is.na(vacc.del$HPV.Dose.Number)), ]
 # this leaves 4,281 deliveries because I think some of the ones in the vaccine file couldn't be matched to the delivery data?
