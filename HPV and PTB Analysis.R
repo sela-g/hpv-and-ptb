@@ -61,7 +61,7 @@ cr2 <- function (formula, data, weights = NULL, na.action = na.omit)
 }
 
 # ## vaccine data
-vacc <- read_excel(here("output_deid_final.xlsx"))
+vacc <- read_csv(here("perinatal_panorama_joined_external.csv"))
 head(vacc)
 
 ## are there multiple rows per mom (to account for multiples)
@@ -74,22 +74,22 @@ describeFactors(vacc$m_num_births)
 
 # 28 sets of twins
 
-## also for multiple vaccine doses?
-any(duplicated(vacc$BCCDC_ID))
+## also for multiple vaccine doses? (missing in dataset 16 Jun 2023)
+# any(duplicated(vacc$BCCDC_ID))
 # FALSE
 
 
 ## link to other data
 ## labour and delivery data
-del.dat <- read.csv(here("DeID R2018007_Multiple_Labours.csv"))
+del.dat <- read.csv(here("R2018007_Multiple_Labours.csv"))
 head(del.dat)
 
 ## mom data
-mom.dat <- read.csv(here("DeID R2018007_Mother.csv"))
+mom.dat <- read.csv(here("R2018007_Mother.csv"))
 head(mom.dat)
 
 ## baby data
-baby.dat <- read.csv(here("DeID R2018007_Baby.csv"))
+baby.dat <- read.csv(here("R2018007_Baby.csv"))
 head(baby.dat)
 # not sure there's much of use here. The GA is more accurate in the delivery data
 
@@ -97,15 +97,10 @@ head(baby.dat)
 del_imms <- read.csv(here("DeID Imms Records.csv")) # not sure that these match anymore
 
 
-
-
-```
-
-```{r figure out number of vaccine doses}
 # take the last row
 vacc_mom <- vacc %>%
   group_by(mother_study_id) %>%
-  slice(n = 1)
+  slice(1)
 # 5399 women
 
 # We no longer seem to have number of doses information
@@ -142,9 +137,6 @@ describeFactors(vacc_test_one$HPV.Dose.Number)
 
 describeFactors(del_imms$HPV.Dose.Number)
 
-```
-
-```{r merge delivery with vaccine}
 
 head(vacc2)
 head(del.dat) # del.dat does not have the linking id
