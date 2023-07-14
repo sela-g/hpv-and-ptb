@@ -125,34 +125,17 @@ describeFactors(vacc_mom$m_num_births)
 # 1 "5,786 (99.0%)"
 # 2 "56 (1.0%)" 
 # 28 sets of twins
-# I am not sure how the above is possible. Output as of 8-MAY-2023:
-# 1 "5,347 (99.0%)"
-# 2 "52 (1.0%)" 
-# 26 sets of twins
 
 # total number of babies
 vacc %>% group_by(baby_study_id) %>% count %>% nrow()
-# 5,447 (06 Jul 2023)
-
 
 describeFactors(vacc_mom$HPV.Vaccination.Status)
-# 08-May-2023:           
-#NA    "2,474 (45.8%)"
-#Valid "2,925 (54.2%)"
 
 describeFactors(vacc_mom$dose_counts)
 # Invalid "4 (0.1%)"     
 # NA      "5,030 (93.2%)"
 # Valid   "276 (5.1%)"   
 # Missing "89 (1.6%)" 
-# 08-May-2023: 
-# 0  "2,410 (44.6%)"
-# 1  "232 (4.3%)"   
-# 2  "509 (9.4%)"
-# 3  "2,224 (41.2%)"
-# 4  "16 (0.3%)"
-# 5  "7 (0.1%)"
-# 6  "1
 
 vacc_mom <- vacc_mom %>% 
   mutate(vaccine = case_when(
@@ -178,9 +161,6 @@ vacc_test_one <- vacc_test_one %>%
   ))
 
 describeFactors(vacc_test_one$vacc_status)
-# 08Mar2023: 
-# No  "2,410 (44.6%)"
-# Yes "2,989 (55.4%)"
 
 # del_imms is not present in combined dataset
 # describeFactors(del_imms$HPV.Dose.Number)
@@ -245,23 +225,12 @@ describeFactors(vacc_mom$dose_counts)
 # # one          "198 (3.6%)"   
 # # two          "451 (8.3%)"   
 # # 3 or more    "1,995 (36.6%)"
- # 08-May-2023: 
- # 0 "2,410 (44.6%)"
- # 1 "232 (4.3%)"   
- # 2 "509 (9.4%)"   
- # 3 "2,224 (41.2%)"
- # 4 "16 (0.3%)"    
- # 5 "7 (0.1%)"     
- # 6 "1 (0.0%)"
+
 
 getDescriptionStatsBy(vacc_mom$final_ga, vacc_mom$HPV.Vaccination.Status)
 #           no/unknown           yes                 
 # Mean (SD) "38.4 (&plusmn;2.2)" "38.3 (&plusmn;2.1)"
 # Missing   "4 (0.1%)"           "3 (0.1%)" 
-# 08-May-2023: 
-#           no/unknown           yes                 
-# Mean (SD) "38.5 (&plusmn;2.1)" "38.4 (&plusmn;2.1)"
-# Missing   "3 (0.1%)"           "4 (0.1%)" 
 
 ## make a preterm variable? ####
 # what is the range of GA?
@@ -287,9 +256,6 @@ summary(vacc_mom$final_ga)
 describeFactors(vacc_baby$HPV.Vaccination.Status)
 # no/unknown "2,803 (51.5%)"
 # yes        "2,644 (48.5%)"
-# 08MAR2023:
-# NA    "2,410 (44.6%)"
-# Valid "2,989 (55.4%)"
 
 describeFactors(vacc_baby$PTB)
 # term    "4,794 (88.0%)"
@@ -301,11 +267,6 @@ getDescriptionStatsBy(vacc_baby$PTB, vacc_baby$HPV.Vaccination.Status)
 # term    "2,482 (88.5%)" "2,312 (87.4%)"
 # preterm "317 (11.3%)"   "329 (12.4%)"  
 # Missing "4 (0.1%)"      "3 (0.1%)" 
-# 08-Mar-2023
-#         NA            	Valid
-# term	2,158 (89.3%)	2,636 (88.0%)
-# preterm	273 (10.5%)	373 (11.8%)
-# Missing	3 (0.1%)	4 (0.1%)
 
 vacc_baby <- vacc_baby %>% 
   mutate(dose_counts = case_when(dose_counts < 1 | !is.numeric(dose_counts) ~ "none/unknown",
@@ -351,12 +312,6 @@ getDescriptionStatsBy(factor(vacc_baby$premature), vacc_baby$HPV.Vaccination.Sta
 # 1 "59 (2.1%)"     "70 (2.6%)"    
 # 2 "8 (0.3%)"      "2 (0.1%)"     
 # 3 "0 (0.0%)"      "1 (0.0%)"
-# 08-Mar-2023
-#   no/unknown      yes            
-# 0	2,376 (97.6%)	2,931 (97.3%)
-# 1	50 (2.1%)	79 (2.6%)
-# 2	8 (0.3%)	2 (0.1%)
-# 3	0 (0.0%)	1 (0.0%)
 
 
 # make a category
@@ -365,19 +320,14 @@ vacc_baby$prev.ptb <- factor(ifelse(vacc_baby$premature == 0, "None", "At least 
 describeFactors(vacc_baby$prev.ptb)
 # None         "5,307 (97.4%)"
 # At least one "140 (2.6%)"
-# 08-Mar-2023
-# None         "5,307 (97.4%)"
-# At least one "140 (2.6%)"
+
 
 getDescriptionStatsBy(factor(vacc_baby$r_substance_use), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "426 (15.2%)"   "563 (21.3%)"  
 # Missing "2,377 (84.8%)" "2,081 (78.7%)"
 # the missings are no I think
-# 08-Mar-2023
-#               NA	      Valid
-#     1   	373 (15.5%)	605 (20.2%)
-# Missing	2,037 (84.5%)	2,384 (79.8%)
+
 
 ## thinking about other substance use definition
 vacc_baby <- vacc_baby %>% 
@@ -464,11 +414,7 @@ summary(pre.1)
 #                   Estimate Std. Error z value Pr(>|z|)    
 # (Intercept)       -2.05792    0.05964 -34.504   <2e-16 ***
 # HPV.Vaccination.Statusyes  0.10811    0.08384   1.289    0.197 
-# 08-MAR-2023:
-# Coefficients:
-#                             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -2.0675     0.0642  -32.19   <2e-16 ***
-#   HPV.Vaccination.StatusValid   0.1120     0.0848    1.32     0.19 
+
 
 plot(Effect(pre.1, focal.predictors = c("HPV.Vaccination.Status")))
 
@@ -480,12 +426,7 @@ summary(pre.2)
 # (Intercept)          -2.11761    0.06089 -34.780   <2e-16 ***
 # HPV.Vaccination.Statusyes     0.10074    0.08449   1.192    0.233    
 # prev.ptbAt least one  1.50793    0.18100   8.331   <2e-16 ***
-# 08-MAR-2023:
-# Coefficients:
-#                             Estimate Std. Error z value Pr(>|z|)    
-#  (Intercept)                  -2.2010     0.0677  -32.52   <2e-16 ***
-#  HPV.Vaccination.StatusValid   0.1258     0.0879    1.43     0.15
-#  prev.ptbAt least one          1.5505     0.1824    8.50   <2e-16 ***
+
 
 
 plot(Effect(pre.2, focal.predictors = c("prev.ptb")))
@@ -500,13 +441,7 @@ summary(pre.3)
 # HPV.Vaccination.Statusyes     0.07279    0.08495   0.857    0.392    
 # prev.ptbAt least one  1.52640    0.18161   8.405  < 2e-16 ***
 # subs_use1             0.40924    0.10113   4.047 5.19e-05 ***
-# 08-MAR-2023:
-# Coefficients:
-#                             Estimate Std. Error z value Pr(>|z|)    
-#  (Intercept)                  -2.2720     0.0709  -32.06  < 2e-16 ***
-#  HPV.Vaccination.StatusValid   0.1045     0.0882    1.18  0.23606    
-#  prev.ptbAt least one          1.5707     0.1830    8.58  < 2e-16 ***
-#  subs_use1                     0.4022     0.1039    3.87  0.00011 ***
+
 
 
 plot(Effect(pre.3, focal.predictors = c("subs_use")))
@@ -518,12 +453,7 @@ exp(cbind(pre.3$coefficients, confint(pre.3)))
 # HPV.Vaccination.Statusyes    1.0755000 0.91051374 1.2704542
 # prev.ptbAt least one 4.6015776 3.20488942 6.5416378
 # subs_use1            1.5056749 1.23196183 1.8317455
-# 08-MAR-2023:
-#                               2.5 % 97.5 %
-#(Intercept)                 0.1  0.09   0.12
-#HPV.Vaccination.StatusValid 1.1  0.93   1.32
-#prev.ptbAt least one        4.8  3.34   6.86
-#subs_use1                   1.5  1.22   1.83
+
 
 ## baby year of birth?
 
@@ -540,12 +470,7 @@ drop1(pre.4, test = "Chi")
 # HPV.Vaccination.Status  1   3903.8 3911.8  1.205    0.2723    
 # prev.ptb        1   3960.4 3968.4 57.802 2.899e-14 ***
 # smoke.cat       2   3905.2 3911.2  2.545    0.2801  
-# 08-MAR2023:
-#                        Df Deviance  AIC   LRT Pr(>Chi)    
-#<none>                        2349 2359                   
-#HPV.Vaccination.Status  1     2350 2358  1.23     0.27    
-#rev.ptb                1     2372 2380 22.58    2e-06 ***
-#smoke.cat               2     2352 2358  2.67     0.26 
+
 
 pre.all <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + subs_use + smoke.cat, data = vacc_baby, family = "binomial")
 summary(pre.all)
@@ -571,10 +496,7 @@ confint(fit1)*100
 #                        Est.      Lower     Upper
 # (Intercept)       11.325521 10.3383405 12.312701
 # HPV.Vaccination.Statusyes  1.131907 -0.3405433  2.604357
-# 08-MAR-2023:
-#                                 Est.         Lower        Upper
-#(Intercept)                 11.229993563 10.1775257402 12.282461386
-#HPV.Vaccination.StatusValid  1.166168896 -0.2992527216  2.631590514
+
 
 # TODO: Is PTB.spont supposed to be preterm *and* spontaneous? then why denote "term"
 # and not 0 1 etc?... as of 05Jul2023, I still don't genuinely understand what.. is happening here. 
