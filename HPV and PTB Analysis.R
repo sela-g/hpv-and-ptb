@@ -97,15 +97,25 @@ head(baby.dat)
 
 #del_imms <- read.csv(here("DeID Imms Records.csv")) # not sure that these match anymore
 
-# manually calculate dose counts
-vacc <- vacc %>% group_by(mother_study_id) %>% 
-  mutate(dose_counts = case_when(!is.na(Age.at.dose) ~ n_distinct(Immunization.Date), TRUE ~ 0))
+# add placeholders for missing vaccine dates
+vacc[vacc$Immunization.Date == "", "Immunization.Date"] = "1000-01-01"
 
+# manually calculate dose counts, subtract doses that occurred after giving birth
+vacc <- vacc %>% group_by(mother_study_id) %>% 
+  mutate(dose_counts = case_when(!is.na(Age.at.dose) ~ n_distinct(Immunization.Date) - sum(
+    # vaccinated year(s) after giving birth
+    strftime(Immunization.Date, format = "%Y") > baby_delivered_year | 
+    # vaccinated month(s) after giving birth 
+    # (NOTE: NO WAY OF KNOWING IF VACCINATED WITHIN SAME MONTH AS BIRTH, NO OCCURENCES IN DATASET (14 JUL 2023))
+    (strftime(Immunization.Date, format = "%Y") > baby_delivered_year & strftime(Immunization.Date, format = "%m") > baby_delivered_month)), TRUE ~ 0))
+
+# vaccination status is valid if there is vaccination data and all doses occurred after giving birth
 vacc <- vacc %>%
   mutate(HPV.Vaccination.Status = case_when(
-    !is.na(Age.at.dose) ~ "Valid",
+    !is.na(Age.at.dose) & dose_counts > 0 ~ "Valid",
     TRUE ~ "NA"
   ))
+levels(vacc$HPV.Vaccination.Status) <- c("Valid", "NA")
 
 # take the last row
 vacc_mom <- vacc %>% slice(1)
@@ -127,8 +137,8 @@ vacc %>% group_by(baby_study_id) %>% count %>% nrow()
 
 describeFactors(vacc_mom$HPV.Vaccination.Status)
 # 08-May-2023:           
-# NA    "2,410 (44.6%)"
-# Valid "2,989 (55.4%)"
+#NA    "2,474 (45.8%)"
+#Valid "2,925 (54.2%)"
 
 describeFactors(vacc_mom$dose_counts)
 # Invalid "4 (0.1%)"     
@@ -219,12 +229,7 @@ describeFactors(vacc_test_one$vacc_status)
 # # make new variable that is vaccinated vs not
 # 
 # vacc_mom$HPV.Vaccination.Status <- factor(ifelse(vacc_mom$HPV.Dose.Number == 0 | is.na(vacc_mom$HPV.Dose.Number), "no/unknown", "yes"))
- describeFactors(vacc_mom$HPV.Vaccination.Status)
- # no/unknown "2,803 (51.5%)"
- # yes        "2,644 (48.5%)"
- # 08MAR2023:
- # NA    "2,410 (44.6%)"
- # Valid "2,989 (55.4%)"
+
 # 
 # ## lets also make a vaccine dose variable
 # vacc_mom$vaccine.dose <- factor(case_when(
@@ -234,7 +239,8 @@ describeFactors(vacc_test_one$vacc_status)
 #   vacc_mom$HPV.Dose.Number == 2 ~ "two", 
 #   TRUE ~"3 or more"), levels = c("none/unknown", "one", "two", "3 or more"))
 # 
- describeFactors(vacc_mom$dose_counts)
+
+describeFactors(vacc_mom$dose_counts)
 # # none/unknown "2,803 (51.5%)"
 # # one          "198 (3.6%)"   
 # # two          "451 (8.3%)"   
@@ -267,6 +273,24 @@ vacc_baby <- vacc %>% group_by(baby_study_id) %>%
   mutate(PTB = factor(ifelse(final_ga < 37, "preterm", "term"), levels = c("term", "preterm"))) %>%
   slice(1)
 
+vacc_mom <- vacc_mom %>%
+  mutate(PTB = factor(ifelse(final_ga < 37, "preterm", "term"), levels = c("term", "preterm")))
+
+describeFactors(vacc_baby$dose_counts)
+
+getDescriptionStatsBy(vacc_baby$final_ga, vacc_baby$HPV.Vaccination.Status)
+
+summary(vacc_mom$final_ga[which(vacc_mom$final_ga < 37)])
+
+summary(vacc_mom$final_ga)
+
+describeFactors(vacc_baby$HPV.Vaccination.Status)
+# no/unknown "2,803 (51.5%)"
+# yes        "2,644 (48.5%)"
+# 08MAR2023:
+# NA    "2,410 (44.6%)"
+# Valid "2,989 (55.4%)"
+
 describeFactors(vacc_baby$PTB)
 # term    "4,794 (88.0%)"
 # preterm "646 (11.9%)"  
@@ -288,20 +312,30 @@ vacc_baby <- vacc_baby %>%
                                  dose_counts == 1 ~ "one", 
                                  dose_counts == 2 ~ "two", 
                                  dose_counts >= 3 ~ "3 or more"))
+levels(vacc_baby$dose_counts) <- c("none/unknown", "one", "two", "3 or more")
 
 getDescriptionStatsBy(vacc_baby$PTB, vacc_baby$dose_counts)
 #         none/unknown    one           two           3 or more      
 # term    "2,482 (88.5%)" "177 (89.4%)" "384 (85.1%)" "1,751 (87.8%)"
 # preterm "317 (11.3%)"   "21 (10.6%)"  "66 (14.6%)"  "242 (12.1%)"  
 # Missing "4 (0.1%)"      "0 (0.0%)"    "1 (0.2%)"    "2 (0.1%)"
-
+# 08-Mar-2023
+#         none/unknown    one           two           3 or more
+# term    "2,158 (88.7%)" "206 (88.8%)" "437 (85.4%)" "1,993 (87.8%)"
+# preterm "273 (11.2%)"   "26 (11.2%)"  "74 (14.5%)"  "273 (12.0%)"
+# Missing "3 (0.1%)"      "0  (0.0%)"   "1 (0.2%)"    "3 (0.1%)"
 
 
 ### will want to control for things like age, and previous PTB, etc?
 
 # split into different ranges
-vacc_mom$ptb.3cat <- factor(ifelse(vacc_mom$final_ga < 32, "20-32", ifelse(vacc_mom$final_ga < 35, "32-35", ifelse(vacc_mom$final_ga < 37, "35-37", "term"))))
-getDescriptionStatsBy(vacc_mom$ptb.3cat, vacc_mom$HPV.Vaccination.Status)
+vacc_baby$ptb.3cat <- factor(ifelse(vacc_baby$final_ga < 32, "20-32", 
+                                    ifelse(vacc_baby$final_ga < 35, "32-35", 
+                                           ifelse(vacc_baby$final_ga < 37, "35-37", "term"))))
+vacc_mom$ptb.3cat <- factor(ifelse(vacc_mom$final_ga < 32, "20-32", 
+                                    ifelse(vacc_baby$final_ga < 35, "32-35", 
+                                           ifelse(vacc_baby$final_ga < 37, "35-37", "term"))))
+getDescriptionStatsBy(vacc_baby$ptb.3cat, vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 20-32   "44 (1.6%)"     "33 (1.2%)"    
 # 32-35   "82 (2.9%)"     "71 (2.7%)"    
@@ -310,8 +344,7 @@ getDescriptionStatsBy(vacc_mom$ptb.3cat, vacc_mom$HPV.Vaccination.Status)
 # Missing "4 (0.1%)"      "3 (0.1%)"  
 
 
-
-getDescriptionStatsBy(factor(vacc_mom$premature), vacc_mom$HPV.Vaccination.Status)
+getDescriptionStatsBy(factor(vacc_baby$premature), vacc_baby$HPV.Vaccination.Status)
 # these are previous preterm deliveries? I think so
 #   no/unknown      yes            
 # 0 "2,736 (97.6%)" "2,571 (97.2%)"
@@ -319,22 +352,24 @@ getDescriptionStatsBy(factor(vacc_mom$premature), vacc_mom$HPV.Vaccination.Statu
 # 2 "8 (0.3%)"      "2 (0.1%)"     
 # 3 "0 (0.0%)"      "1 (0.0%)"
 # 08-Mar-2023
-#             0	        1	          2	          3           	4	            5	        6
-# term	2,153 (89.3%)	206 (88.8%)	435 (85.5%)	1,968 (88.5%)	16 (100.0%)	5 (71.4%)	1 (100.0%)
-# preterm	254 (10.5%)	26 (11.2%)	73 (14.3%)	253 (11.4%)	0 (0.0%)	2 (28.6%)	0 (0.0%)
-# Missing	3 (0.1%)	0 (0.0%)	1 (0.2%)	3 (0.1%)	0 (0.0%)	0 (0.0%)	0 (0.0%)
+#   no/unknown      yes            
+# 0	2,376 (97.6%)	2,931 (97.3%)
+# 1	50 (2.1%)	79 (2.6%)
+# 2	8 (0.3%)	2 (0.1%)
+# 3	0 (0.0%)	1 (0.0%)
 
 
 # make a category
 vacc_mom$prev.ptb <- factor(ifelse(vacc_mom$premature == 0, "None", "At least one"), levels = c("None", "At least one"))
-describeFactors(vacc_mom$prev.ptb)
+vacc_baby$prev.ptb <- factor(ifelse(vacc_baby$premature == 0, "None", "At least one"), levels = c("None", "At least one"))
+describeFactors(vacc_baby$prev.ptb)
 # None         "5,307 (97.4%)"
 # At least one "140 (2.6%)"
 # 08-Mar-2023
-# None         "5,260 (97.4%)"
-# At least one "139 (2.6%)"
+# None         "5,307 (97.4%)"
+# At least one "140 (2.6%)"
 
-getDescriptionStatsBy(factor(vacc_mom$r_substance_use), vacc_mom$HPV.Vaccination.Status)
+getDescriptionStatsBy(factor(vacc_baby$r_substance_use), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "426 (15.2%)"   "563 (21.3%)"  
 # Missing "2,377 (84.8%)" "2,081 (78.7%)"
@@ -345,75 +380,74 @@ getDescriptionStatsBy(factor(vacc_mom$r_substance_use), vacc_mom$HPV.Vaccination
 # Missing	2,037 (84.5%)	2,384 (79.8%)
 
 ## thinking about other substance use definition
-vacc_mom <- vacc_mom %>% 
+vacc_baby <- vacc_baby %>% 
   mutate(subs_2 = case_when(
     r_heroin == 1 | r_cocaine == 1 | r_methadone == 1 | r_solvents == 1 | r_rx == 1 | r_marijuana == 1 | r_other_drug == 1 | r_unk_drug == 1 ~ 1,
     TRUE ~ 0
   ))
 
-describeFactors(vacc_mom$subs_2)
-describeFactors(vacc_mom$r_marijuana)
-describeFactors(vacc_mom$r_heroin)
-describeFactors(vacc_mom$r_cocaine)
-describeFactors(vacc_mom$r_methadone)
-describeFactors(vacc_mom$r_solvents)
-describeFactors(vacc_mom$r_rx)
-describeFactors(vacc_mom$r_other_drug)
-describeFactors(vacc_mom$r_unk_drug)
+describeFactors(vacc_baby$subs_2)
+describeFactors(vacc_baby$r_marijuana)
+describeFactors(vacc_baby$r_heroin)
+describeFactors(vacc_baby$r_cocaine)
+describeFactors(vacc_baby$r_methadone)
+describeFactors(vacc_baby$r_solvents)
+describeFactors(vacc_baby$r_rx)
+describeFactors(vacc_baby$r_other_drug)
+describeFactors(vacc_baby$r_unk_drug)
 
+vacc_baby$subs_use <- replace(vacc_baby$r_substance_use, which(is.na(vacc_baby$r_substance_use)), 0)
+vacc_baby$subs_use <- factor(vacc_baby$subs_use)
 vacc_mom$subs_use <- replace(vacc_mom$r_substance_use, which(is.na(vacc_mom$r_substance_use)), 0)
 vacc_mom$subs_use <- factor(vacc_mom$subs_use)
-levels(vacc_mom$subs_use)
+levels(vacc_baby$subs_use)
 
 
-getDescriptionStatsBy(factor(vacc_mom$r_heroin), vacc_mom$HPV.Vaccination.Status)
+getDescriptionStatsBy(factor(vacc_baby$r_heroin), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "31 (1.1%)"     "28 (1.1%)"    
 # Missing "2,772 (98.9%)" "2,616 (98.9%)"
-# 08-Mar-2023
-# NA	Valid
-# 1  	30 (1.2%)	29 (1.0%)
-# Missing	2,380 (98.8%)	2,960 (99.0%)
 
-getDescriptionStatsBy(factor(vacc_mom$r_cocaine), vacc_mom$HPV.Vaccination.Status)
+
+getDescriptionStatsBy(factor(vacc_baby$r_cocaine), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "57 (2.0%)"     "65 (2.5%)"    
 # Missing "2,746 (98.0%)" "2,579 (97.5%)"
-# 08-Mar-2023
-# NA	Valid
-# 1  	50 (2.1%)	70 (2.3%)
-# Missing	2,360 (97.9%)	2,919 (97.7%)
 
-getDescriptionStatsBy(factor(vacc_mom$r_methadone), vacc_mom$HPV.Vaccination.Status)
+
+getDescriptionStatsBy(factor(vacc_baby$r_methadone), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "27 (1.0%)"     "25 (0.9%)"    
 # Missing "2,776 (99.0%)" "2,619 (99.1%)"
-# 08-Mar-2023
-# NA	Valid
-# 1  	24 (1.0%)	27 (0.9%)
-# Missing	2,386 (99.0%)	2,962 (99.1%)
 
-getDescriptionStatsBy(factor(vacc_mom$r_rx), vacc_mom$HPV.Vaccination.Status)
+
+getDescriptionStatsBy(factor(vacc_baby$r_rx), vacc_baby$HPV.Vaccination.Status)
 #         no/unknown      yes            
 # 1       "11 (0.4%)"     "26 (1.0%)"    
 # Missing "2,792 (99.6%)" "2,618 (99.0%)"
-# 08-Mar-2023
-#         NA    	Valid
-# 1  	10 (0.4%) 26 (0.9%)
-# Missing	2,400 (99.6%)	2,963 (99.1%)
 
-# getDescriptionStatsBy(vacc_mom$r_alc_flg, vacc_mom$HPV.Vaccination.Status)
+
+# getDescriptionStatsBy(vacc_baby$r_alc_flg, vacc_baby$HPV.Vaccination.Status)
 # # not sure about this one. Will need to check data dictionary
 # 
-# getDescriptionStatsBy(factor(vacc_mom$second_hand_smoke), vacc_mom$HPV.Vaccination.Status)
+# getDescriptionStatsBy(factor(vacc_baby$second_hand_smoke), vacc_baby$HPV.Vaccination.Status)
 # # not sure about this one. Will need to check data dictionary. Don't use has been removed from PSBC for low completion
 # 
-# getDescriptionStatsBy(factor(vacc_mom$smoker_type_cd), vacc_mom$HPV.Vaccination.Status)
+# getDescriptionStatsBy(factor(vacc_baby$smoker_type_cd), vacc_baby$HPV.Vaccination.Status)
 # # not sure about this one. Will need to check data dictionary
+
+vacc_baby$smoke.cat <- vacc_baby$smoker_type_cd
+# NULL is a no
+levels(vacc_baby$smoke.cat)[1] <- "N"
+vacc_baby <- vacc_baby %>% rowwise() %>% mutate(smoke_flag = ifelse(smoke.cat == "C", 1, 0))
+vacc_baby$smoke.cat <- factor(vacc_baby$smoke.cat, levels = c("N", "F", "C"), labels = c("Nonsmoker", "Quit prior to pregnancy", "Smoked during pregnancy"))
+getDescriptionStatsBy(factor(vacc_baby$smoke.cat), vacc_baby$HPV.Vaccination.Status)
+
 
 vacc_mom$smoke.cat <- vacc_mom$smoker_type_cd
 # NULL is a no
 levels(vacc_mom$smoke.cat)[1] <- "N"
+vacc_mom <- vacc_mom %>% rowwise() %>% mutate(smoke_flag = ifelse(smoke.cat == "C", 1, 0))
 vacc_mom$smoke.cat <- factor(vacc_mom$smoke.cat, levels = c("N", "F", "C"), labels = c("Nonsmoker", "Quit prior to pregnancy", "Smoked during pregnancy"))
 getDescriptionStatsBy(factor(vacc_mom$smoke.cat), vacc_mom$HPV.Vaccination.Status)
 # 08-MAR-2023
@@ -423,7 +457,8 @@ getDescriptionStatsBy(factor(vacc_mom$smoke.cat), vacc_mom$HPV.Vaccination.Statu
 #moked during pregnancy	480 (19.9%)	749 (25.1%)
 #Missing	946 (39.3%)	1,091 (36.5%)
 
-pre.1 <- glm(PTB ~ HPV.Vaccination.Status, data = vacc_mom, family = "binomial")
+options(digits = 10)
+pre.1 <- glm(PTB ~ HPV.Vaccination.Status, data = vacc_baby, family = "binomial")
 summary(pre.1)
 # Coefficients:
 #                   Estimate Std. Error z value Pr(>|z|)    
@@ -432,13 +467,13 @@ summary(pre.1)
 # 08-MAR-2023:
 # Coefficients:
 #                             Estimate Std. Error z value Pr(>|z|)    
-# (Intercept)                  -2.1373     0.0663  -32.22   <2e-16 ***
-#  HPV.Vaccination.StatusValid   0.1315     0.0872    1.51     0.13
+# (Intercept)                  -2.0675     0.0642  -32.19   <2e-16 ***
+#   HPV.Vaccination.StatusValid   0.1120     0.0848    1.32     0.19 
 
 plot(Effect(pre.1, focal.predictors = c("HPV.Vaccination.Status")))
 
 ### with previous preterm birth
-pre.2 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb, data = vacc_mom, family = "binomial")
+pre.2 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb, data = vacc_baby, family = "binomial")
 summary(pre.2)
 # Coefficients:
 #                      Estimate Std. Error z value Pr(>|z|)    
@@ -457,7 +492,7 @@ plot(Effect(pre.2, focal.predictors = c("prev.ptb")))
 plot(Effect(pre.2, focal.predictors = c("HPV.Vaccination.Status", "prev.ptb")))
 
 # subs_use
-pre.3 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + subs_use, data = vacc_mom, family = "binomial")
+pre.3 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + subs_use, data = vacc_baby, family = "binomial")
 summary(pre.3)
 # Coefficients:
 #                      Estimate Std. Error z value Pr(>|z|)    
@@ -493,10 +528,10 @@ exp(cbind(pre.3$coefficients, confint(pre.3)))
 ## baby year of birth?
 
 # # smoking
-# vacc_mom$smoker_type_cd
-# vacc_mom$smoke.cat <- factor(vacc_mom$smoke.cat, levels = c())
+# vacc_baby$smoker_type_cd
+# vacc_baby$smoke.cat <- factor(vacc_baby$smoke.cat, levels = c())
 
-pre.4 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + smoke.cat, data = vacc_mom, family = "binomial")
+pre.4 <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + smoke_flag, data = vacc_baby, family = "binomial")
 summary(pre.4)
 
 drop1(pre.4, test = "Chi")
@@ -512,7 +547,7 @@ drop1(pre.4, test = "Chi")
 #rev.ptb                1     2372 2380 22.58    2e-06 ***
 #smoke.cat               2     2352 2358  2.67     0.26 
 
-pre.all <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + subs_use + smoke.cat, data = vacc_mom, family = "binomial")
+pre.all <- glm(PTB ~ HPV.Vaccination.Status + prev.ptb + subs_use + smoke.cat, data = vacc_baby, family = "binomial")
 summary(pre.all)
 #08-MAR@-2023:
 #                                 Estimate Std. Error z value Pr(>|z|)    
@@ -525,9 +560,9 @@ summary(pre.all)
 
 
 # using blm package to get a sense of if the odds ratios and logistic regression are properly estimating the risks
-vacc_mom$PTB2 <- ifelse(vacc_mom$PTB == "preterm", 1, 0)
+vacc_baby$PTB2 <- ifelse(vacc_baby$PTB == "preterm", 1, 0)
 
-fit1 <- blm(PTB2 ~ HPV.Vaccination.Status, data = vacc_mom)
+fit1 <- blm(PTB2 ~ HPV.Vaccination.Status, data = vacc_baby)
 summary(fit1)
 
 coef(fit1)*100
@@ -537,20 +572,33 @@ confint(fit1)*100
 # (Intercept)       11.325521 10.3383405 12.312701
 # HPV.Vaccination.Statusyes  1.131907 -0.3405433  2.604357
 # 08-MAR-2023:
-#                            Est. Lower Upper
-#(Intercept)                 10.6  9.54  11.6
-#HPV.Vaccination.StatusValid  1.3 -0.11   2.7
+#                                 Est.         Lower        Upper
+#(Intercept)                 11.229993563 10.1775257402 12.282461386
+#HPV.Vaccination.StatusValid  1.166168896 -0.2992527216  2.631590514
 
 # TODO: Is PTB.spont supposed to be preterm *and* spontaneous? then why denote "term"
 # and not 0 1 etc?... as of 05Jul2023, I still don't genuinely understand what.. is happening here. 
-levels(vacc_mom$PTB)
-levels(as.factor(vacc_mom$m_labour_type))
-vacc_mom <- vacc_mom %>% rowwise() %>% 
-  mutate(PTB.spont = case_when(PTB == "term" ~ 1, 
-                              m_labour_type == "spontaneous" ~ 0, 
-                              m_labour_type %in% c("induced", "none") ~ 1))
+levels(vacc_baby$PTB)
+levels(as.factor(vacc_baby$m_labour_type))
+vacc_baby <- vacc_baby %>% rowwise() %>% 
+  mutate(PTB.spont = if_else(PTB == "term", 0,
+                                           case_match(m_labour_type, "spontaneous" ~ 1,
+                                                                    c("induced", "none") ~ 0)),
+         PTB.spont2 = if_else(PTB == "term", "Term",
+                              case_match(m_labour_type, "spontaneous" ~ "Spontaneous preterm",
+                                         c("induced", "none") ~ "Iatrogenic preterm")))
+levels(vacc_baby$PTB.spont2) <- c("Spontaneous preterm", "Iatrogenic preterm", "Term")
 
-spon.1 <- glm(PTB.spont ~ HPV.Vaccination.Status, data = vacc_mom, family = "binomial")
+vacc_mom <- vacc_mom %>% rowwise() %>% 
+  mutate(PTB.spont = if_else(PTB == "term", 0,
+                             case_match(m_labour_type, "spontaneous" ~ 1,
+                                        c("induced", "none") ~ 0)),
+         PTB.spont2 = if_else(PTB == "term", "Term",
+                              case_match(m_labour_type, "spontaneous" ~ "Spontaneous preterm",
+                                         c("induced", "none") ~ "Iatrogenic preterm")))
+levels(vacc_mom$PTB.spont2) <- c("Spontaneous preterm", "Iatrogenic preterm", "Term")
+
+spon.1 <- glm(PTB.spont ~ HPV.Vaccination.Status, data = vacc_baby, family = "binomial")
 summary(spon.1)
 # Coefficients:
 #                   Estimate Std. Error z value Pr(>|z|)    
@@ -560,7 +608,7 @@ summary(spon.1)
 plot(Effect(spon.1, focal.predictors = c("HPV.Vaccination.Status")))
 
 ### with previous preterm birth
-spon.2 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb, data = vacc_mom, family = "binomial")
+spon.2 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb, data = vacc_baby, family = "binomial")
 summary(spon.2)
 # Coefficients:
 #                      Estimate Std. Error z value Pr(>|z|)    
@@ -572,7 +620,7 @@ plot(Effect(spon.2, focal.predictors = c("prev.ptb")))
 plot(Effect(spon.2, focal.predictors = c("HPV.Vaccination.Status", "prev.ptb")))
 
 # subs_use
-spon.3 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use, data = vacc_mom, family = "binomial")
+spon.3 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use, data = vacc_baby, family = "binomial")
 summary(spon.3)
 # Coefficients:
 #                      Estimate Std. Error z value Pr(>|z|)    
@@ -592,12 +640,13 @@ exp(cbind(spon.3$coefficients, confint(spon.3)))
 # subs_use1            1.44725830 1.14767960 1.8123377
 
 ### year of birth
-summary(vacc_mom$baby_delivered_year)
+summary(vacc_baby$baby_delivered_year)
 # Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
 # 2015    2015    2016    2016    2016    2017 
 
-vacc_mom$baby_delivered_year <- factor(vacc_mom$baby_delivered_year)
-getDescriptionStatsBy(vacc_mom$PTB.spont, vacc_mom$baby_delivered_year)
+vacc_baby$baby_delivered_year <- factor(vacc_baby$baby_delivered_year)
+vacc_baby$PTB.spont <- factor(vacc_baby$PTB.spont)
+getDescriptionStatsBy(vacc_baby$PTB.spont, vacc_baby$baby_delivered_year)
 #           2015            2016            2017         
 # term      "1,765 (90.9%)" "2,287 (90.6%)" "742 (90.8%)"
 # spont.ptb "174 (9.0%)"    "231 (9.2%)"    "75 (9.2%)"  
@@ -605,7 +654,7 @@ getDescriptionStatsBy(vacc_mom$PTB.spont, vacc_mom$baby_delivered_year)
 
 
 # year
-spon.4 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use + baby_delivered_year, data = vacc_mom, family = "binomial")
+spon.4 <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use + baby_delivered_year, data = vacc_baby, family = "binomial")
 summary(spon.4)
 # Coefficients:
 #                          Estimate Std. Error z value Pr(>|z|)    
@@ -617,7 +666,7 @@ summary(spon.4)
 # baby_delivered_year2017  0.019252   0.146219   0.132  0.89525 
 
 
-getDescriptionStatsBy(vacc_mom$ptb.3cat, vacc_mom$HPV.Vaccination.Status, statistics = TRUE)
+getDescriptionStatsBy(vacc_baby$ptb.3cat, vacc_baby$HPV.Vaccination.Status, statistics = TRUE)
 #         no/unknown      yes             P-value
 # 20-32   "33 (1.2%)"     "24 (0.9%)"     "0.31" 
 # 32-35   "65 (2.4%)"     "50 (2.0%)"     ""     
@@ -625,10 +674,12 @@ getDescriptionStatsBy(vacc_mom$ptb.3cat, vacc_mom$HPV.Vaccination.Status, statis
 # term    "2,482 (90.8%)" "2,312 (90.7%)" ""     
 # Missing "4 (0.1%)"      "3 (0.1%)"      "" 
 
-CochranArmitageTest(table(vacc_mom$HPV.Vaccination.Status, vacc_mom$ptb.3cat))
+CochranArmitageTest(table(vacc_baby$HPV.Vaccination.Status, vacc_baby$ptb.3cat))
 # p-value = 0.5507
+#08-Mar-2023:
+#p-value = 0.5447
 
-#getDescriptionStatsBy(vacc_mom$ptb.3cat, vacc_mom$vaccine.dose, statistics = TRUE)
+getDescriptionStatsBy(vacc_baby$ptb.3cat, vacc_baby$dose_counts, statistics = TRUE)
 #         none/unknown    one           two           3 or more       P-value
 # 20-32   "33 (1.2%)"     "0 (0.0%)"    "2 (0.5%)"    "22 (1.1%)"     "0.28" 
 # 32-35   "65 (2.4%)"     "4 (2.1%)"    "11 (2.5%)"   "35 (1.8%)"     ""     
@@ -637,57 +688,61 @@ CochranArmitageTest(table(vacc_mom$HPV.Vaccination.Status, vacc_mom$ptb.3cat))
 # Missing "4 (0.1%)"      "0 (0.0%)"    "1 (0.2%)"    "2 (0.1%)"      ""  
 
 
-spon.all <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use + smoke.cat, data = vacc_mom, family = "binomial")
+spon.all <- glm(PTB.spont ~ HPV.Vaccination.Status + prev.ptb + subs_use + smoke.cat, data = vacc_baby, family = "binomial")
 summary(spon.all)
 
 vacc_mom$gravida
 describeMedian(vacc_mom$gravida)
 
+vacc_baby$grav.cat <- factor(case_when(
+  vacc_baby$gravida == 1 ~ "One",
+  vacc_baby$gravida <= 3 ~ "Two to three",
+  vacc_baby$gravida >3 ~ "Four or more"
+),
+levels = c("One", "Two to three", "Four or more"))
 vacc_mom$grav.cat <- factor(case_when(
   vacc_mom$gravida == 1 ~ "One",
   vacc_mom$gravida <= 3 ~ "Two to three",
   vacc_mom$gravida >3 ~ "Four or more"
 ),
 levels = c("One", "Two to three", "Four or more"))
-describeFactors(vacc_mom$grav.cat)
+describeFactors(vacc_baby$grav.cat)
 
-vacc_mom$prev.ptb
+vacc_baby$prev.ptb
 
-vacc_mom$m_bmi_no <- replace(vacc_mom$m_bmi_no, vacc_mom$m_bmi_no == 9999.99, NA)
+vacc_baby$m_bmi_no <- replace(vacc_baby$m_bmi_no, vacc_baby$m_bmi_no == 9999.99, NA)
 
-vacc_mom$subs_use
-describeFactors(vacc_mom$subs_use)
+vacc_baby$subs_use
+describeFactors(vacc_baby$subs_use)
 
-vacc_mom$m_mode_del
+vacc_baby$m_mode_del
+describeFactors(vacc_baby$m_mode_del)
 
-vacc_mom$final_ga
+vacc_baby$final_ga
+getDescriptionStatsBy(vacc_baby$final_ga, vacc_baby$HPV.Vaccination.Status)
 
-vacc_mom$ptb.3cat
-
-vacc_mom$PTB.spont2 <- vacc_mom$PTB.spont
-levels(vacc_mom$PTB.spont2) <- c("Iatrogenic preterm", "Spontaneous preterm", "Term")
-vacc_mom$PTB.spont2 <- relevel(vacc_mom$PTB.spont2, ref = "Term")
+vacc_baby$ptb.3cat
 
 #vacc_mom$vaccine.dose
 
 
 # vacc_mom[, varname] returns array, need to use vacc_mom[[varname]] to return vector
 getT1Stat <- function(varname, digits=0, useNA = "ifany"){
-  getDescriptionStatsBy(vacc_mom[[varname]], 
-                        vacc_mom$HPV.Vaccination.Status, 
+  getDescriptionStatsBy(vacc_baby[[varname]], 
+                        vacc_baby$HPV.Vaccination.Status, 
                         add_total_col=TRUE,
                         show_all_values=TRUE, 
                         hrzl_prop=FALSE,
                         statistics= FALSE, 
-                        html=TRUE, 
+                        html=TRUE,
                         useNA = useNA,
                         digits=digits,
                         header_count = TRUE)
 }
 
 getT1Stat.median <- function(varname, digits=0, useNA = "ifany"){
-  getDescriptionStatsBy(vacc_mom[[varname]], 
-                        vacc_mom$HPV.Vaccination.Status, 
+  getDescriptionStatsBy(vacc_baby[[varname]], 
+                        vacc_baby$HPV.Vaccination.Status, 
                         add_total_col=TRUE,
                         show_all_values=TRUE, 
                         hrzl_prop=FALSE,
@@ -712,7 +767,7 @@ table_data[["GA at delivery"]] <- getT1Stat.median("final_ga", 1)
 table_data[["Preterm delivery"]] <- getT1Stat.median("ptb.3cat", 1)
 table_data[["Spontaneous Preterm delivery"]] <- getT1Stat.median("PTB.spont2", 1)
 table_data[["Mode of delivery"]] <- getT1Stat("m_mode_del", 1)
-#table_data[["Number of vaccine doses"]] <- getT1Stat("vaccine.dose", 1)
+table_data[["Number of vaccine doses"]] <- getT1Stat("dose_counts", 1)
 
 
 
@@ -756,7 +811,11 @@ htmlTable::htmlTable(output_data, align = "rrrr",
                      caption = "Table 1. Demographic and clinical data summaries.",
                      ctable = TRUE)
 
-tab_model(pre.1, pre.all, show.intercept = FALSE, show.r2 = FALSE, show.reflvl = FALSE, terms = c("HPV.Vaccination.Status [none/unknown, yes]", "prev.ptb [None, At least one]", "subs_use [0, 1]", "smoke.cat [Nonsmoker, Quit prior to pregnancy, Smoked during pregnancy]"), collapse.ci = FALSE, pred.labels = c("HPV vaccine", "Previous preterm delivery", "Substance use", "Quit smoking prior to pregnancy", "Smoked during pregnancy"), dv.labels = c("Unadjusted model", "Adjusted model"), string.ci = "95% CI", string.est = "Risk Ratios")
+tab_model(pre.1, pre.all, show.intercept = FALSE, show.r2 = FALSE, show.reflvl = FALSE, 
+          terms = c("HPV.Vaccination.Status [NA, Valid]", "prev.ptb [None, At least one]", 
+                    "subs_use [0, 1]", "smoke.cat [Smoked during pregnancy]"), 
+          collapse.ci = FALSE, pred.labels = c("HPV vaccine", "Previous preterm delivery", "Substance use", "Smoked during pregnancy"), 
+          dv.labels = c("Unadjusted model", "Adjusted model"), string.ci = "95% CI", string.est = "Risk Ratios")
 
 pre.risk <- summary(Effect(pre.1, focal.predictors = "HPV.Vaccination.Status"))
 pre.tab <- data.frame(risk = pre.risk$effect, vaccine = c("No/unknown", "Vaccinated"), low = pre.risk$lower, up = pre.risk$upper)
@@ -768,14 +827,17 @@ ggplot(pre.tab, aes(x = vaccine, y = risk)) +
   xlab("HPV vaccine status") +
   ylab("Unadjusted absolute risk\nof preterm birth")
 
-tab_model(spon.1, spon.all, show.intercept = FALSE, show.r2 = FALSE, show.reflvl = FALSE, terms = c("HPV.Vaccination.Status [none/unknown, yes]", "prev.ptb [None, At least one]", "subs_use [0, 1]", "smoke.cat [Nonsmoker, Quit prior to pregnancy, Smoked during pregnancy]"), collapse.ci = FALSE, pred.labels = c("HPV vaccine", "Previous preterm delivery", "Substance use", "Quit smoking prior to pregnancy", "Smoked during pregnancy"), dv.labels = c("Unadjusted model", "Adjusted model"), string.ci = "95% CI", string.est = "Risk Ratios")
+tab_model(spon.1, spon.all, show.intercept = FALSE, show.r2 = FALSE, show.reflvl = FALSE, 
+          terms = c("HPV.Vaccination.Status [NA, Valid]", "prev.ptb [None, At least one]", 
+                    "subs_use [0, 1]", "smoke.cat [Smoked during pregnancy]"),
+          collapse.ci = FALSE, pred.labels = c("HPV vaccine", "Previous preterm delivery", "Substance use", "Smoked during pregnancy"), dv.labels = c("Unadjusted model", "Adjusted model"), string.ci = "95% CI", string.est = "Risk Ratios")
 
 pre.risk2 <- summary(Effect(spon.1, focal.predictors = "HPV.Vaccination.Status"))
 pre.tab2 <- data.frame(risk = pre.risk2$effect, vaccine = c("No/unknown", "Vaccinated"), low = pre.risk2$lower, up = pre.risk2$upper)
 
 ggplot(pre.tab2, aes(x = vaccine, y = risk)) +
   geom_point() +
-  scale_y_continuous(labels = scales::percent_format(), limits = c(0.075, 0.11)) +
+  scale_y_continuous(labels = scales::percent_format(), limits = c(0.055, 0.09)) +
   geom_pointrange(aes(y = risk, ymin = low, ymax = up)) +
   xlab("HPV vaccine status") +
   ylab("Unadjusted absolute risk\nof spontaneous preterm birth")
